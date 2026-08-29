@@ -128,7 +128,6 @@ function QuestionCard({ q, index, topic, analytics }) {
             <div className="rounded-2xl border border-slate-700/50 overflow-hidden transition-all duration-300"
                 style={{ background: "rgba(10,15,30,0.85)", backdropFilter: "blur(24px)", outline: "1px solid rgba(255,255,255,0.025)" }}>
 
-                {/* Card header — always visible */}
                 <button className="w-full text-left px-6 py-5 flex items-start gap-4 hover:bg-slate-800/20 transition-colors duration-150"
                     onClick={() => setExpanded(e => !e)}>
                     <ScoreRing score={q.score} size={72} />
@@ -174,7 +173,6 @@ function QuestionCard({ q, index, topic, analytics }) {
 
                         <div className="h-px bg-slate-800/60" />
 
-                        {/* Your answer */}
                         <div>
                             <div className="mono text-slate-500 text-[10px] tracking-widest mb-2">YOUR ANSWER</div>
                             <div className="rounded-xl border border-slate-700/40 bg-slate-900/40 px-4 py-3">
@@ -182,13 +180,11 @@ function QuestionCard({ q, index, topic, analytics }) {
                             </div>
                         </div>
 
-                        {/* Feedback */}
                         <div className="rounded-xl border border-blue-500/15 bg-blue-500/5 px-4 py-3">
                             <div className="mono text-blue-400/70 text-[10px] tracking-widest mb-1.5">AI FEEDBACK</div>
                             <p className="text-slate-300 text-sm leading-relaxed">{q.feedback}</p>
                         </div>
 
-                        {/* Strengths + Weaknesses */}
                         <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <div className="mono text-emerald-400/70 text-[10px] tracking-widest mb-2">STRENGTHS</div>
@@ -357,27 +353,33 @@ export default function InterviewReport() {
     const navigate = useNavigate();
     const { id } = useParams();
     const [mounted, setMounted] = useState(false);
-    const [data, setData] = useState(MOCK_REPORT);
+    const [data, setData] = useState(null);
+    const [error, setError] = useState(false);
 
     useEffect(() => { setMounted(true); }, []);
 
     useEffect(() => {
         const interviewData = async () => {
             try {
-                const res = await axios.get(`http://localhost:8000/api/interview/report/${id}`,
-                    {
-                        withCredentials: true,
-                    }
-                );
-                console.log(res.data);
+                const res = await axios.get(`http://localhost:8000/api/interview/report/${id}`, {
+                    withCredentials: true,
+                });
                 setData(res.data);
-
             } catch (error) {
-
+                console.error("Failed to fetch report:", error);
+                setError(true);
             }
         }
         interviewData();
-    }, []);
+    }, [id]);
+
+    if (error) {
+        return <div className="min-h-screen bg-[#020409] flex items-center justify-center text-rose-400 mono text-sm">Failed to load report.</div>;
+    }
+
+    if (!data) {
+        return <div className="min-h-screen bg-[#020409] flex items-center justify-center text-slate-600 mono text-sm">Loading...</div>;
+    }
 
     if (!data) return null;
 

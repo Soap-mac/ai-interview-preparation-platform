@@ -14,11 +14,17 @@ function buildFinalCode(driver, code, language) {
     }
 
     if (language === "java") {
-        throw new Error("Java not implemented yet");
+        if (!driver.includes("// Write your code here")) {
+            throw new Error("Java driver code missing placeholder");
+        }
+        return driver.replace("// Write your code here", code);
     }
 
     if (language === "cpp") {
-        throw new Error("C++ not implemented yet");
+        if (!driver.includes("// Write your code here")) {
+            throw new Error("C++ driver code missing placeholder");
+        }
+        return driver.replace("// Write your code here", code);
     }
 
     throw new Error("Unsupported language");

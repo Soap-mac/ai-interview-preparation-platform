@@ -5,7 +5,7 @@ const checkTestCases = async (code, language, testcases) => {
         const results = await Promise.all(
             testcases.map(async (tc, index) => {
                 const response = await groq.chat.completions.create({
-                    model: "llama-3.3-70b-versatile",
+                    model: "openai/gpt-oss-20b",
                     messages: [
                         {
                             role: "system",

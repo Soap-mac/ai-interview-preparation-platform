@@ -42,16 +42,18 @@ ${history}
     try {
 
         const res = await groq.responses.create({
-            model: "llama-3.3-70b-versatile",
+            model: "openai/gpt-oss-20b",
             input: prompt,
             temperature: 0.4
         });
+        console.log("FULL AI RESPONSE:");
+        console.dir(res, { depth: null });
 
         if (!res.output_text) {
             throw new Error("AI returned empty question");
         }
 
-        let question = res.output_text.trim();
+        let question = res?.output_text?.trim();
 
         question = question
             .replace(/^["']|["']$/g, "")

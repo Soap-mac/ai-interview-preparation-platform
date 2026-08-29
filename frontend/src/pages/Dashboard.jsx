@@ -93,6 +93,75 @@ export default function AnalyticsDashboard() {
     const [mounted, setMounted] = useState(false);
     const [data, setData] = useState(MOCK_DATA);
 
+    const [expandedTopic, setExpandedTopic] = useState(null);
+    const [topicInterviews, setTopicInterviews] = useState({});
+    const [loadingTopic, setLoadingTopic] = useState(null);
+    const [expandedInterview, setExpandedInterview] = useState(null);
+    const [interviewReports, setInterviewReports] = useState({});
+    const [loadingReport, setLoadingReport] = useState(null);
+    const [expandedQuestion, setExpandedQuestion] = useState(null);
+
+    const toggleTopic = async (topicKey) => {
+        if (expandedTopic === topicKey) {
+            setExpandedTopic(null);
+            return;
+        }
+        setExpandedTopic(topicKey);
+        setExpandedInterview(null);
+
+        if (!topicInterviews[topicKey]) {
+            setLoadingTopic(topicKey);
+            try {
+                const res = await axios.get(`http://localhost:8000/api/interview/history`, {
+                    params: { limit: 50 },
+                    withCredentials: true,
+                });
+                if (res.data.success) {
+                    const filtered = res.data.interviews.filter(i => i.topic === topicKey);
+                    setTopicInterviews(prev => ({ ...prev, [topicKey]: filtered }));
+                }
+            } catch (err) {
+                console.error("Failed to fetch topic interviews:", err);
+                setTopicInterviews(prev => ({ ...prev, [topicKey]: [] }));
+            } finally {
+                setLoadingTopic(null);
+            }
+        }
+    };
+
+    const toggleInterview = async (interviewId) => {
+        if (expandedInterview === interviewId) {
+            setExpandedInterview(null);
+            return;
+        }
+        setExpandedInterview(interviewId);
+
+        if (!interviewReports[interviewId]) {
+            setLoadingReport(interviewId);
+            try {
+                const res = await axios.get(`http://localhost:8000/api/interview/report/${interviewId}`, {
+                    withCredentials: true,
+                });
+                if (res.data.success) {
+                    setInterviewReports(prev => ({ ...prev, [interviewId]: res.data }));
+                }
+            } catch (err) {
+                console.error("Failed to fetch report:", err);
+            } finally {
+                setLoadingReport(null);
+            }
+        }
+    };
+
+    function MiniMetric({ label, value }) {
+        const color = value >= 8 ? "#22d3ee" : value >= 6 ? "#3b82f6" : "#f472b6";
+        return (
+            <div className="rounded-md border border-slate-800/50 px-2.5 py-2 text-center">
+                <div className="mono text-slate-600 text-[9px] tracking-wide">{label.toUpperCase()}</div>
+                <div className="mono font-bold text-xs mt-0.5" style={{ color }}>{value}/10</div>
+            </div>
+        );
+    }
 
     useEffect(() => {
         const fetchQuestion = async () => {
@@ -258,22 +327,202 @@ export default function AnalyticsDashboard() {
                         <div className="flex flex-col gap-3">
                             {activeTopics
                                 .sort((a, b) => b.avg - a.avg)
-                                .map(({ key, icon, color, glow, label, avg, count }) => (
-                                    <div key={key} className="topic-row rounded-xl border border-slate-800/50 px-4 py-3 transition-colors duration-150 flex flex-col gap-2">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-2.5">
-                                                <span className="text-lg" style={{ color }}>{icon}</span>
-                                                <span className="text-slate-200 text-sm font-bold">{label}</span>
-                                                <span className="mono text-[10px] text-slate-600 border border-slate-700/50 rounded-md px-1.5 py-0.5">{count} session{count > 1 ? "s" : ""}</span>
+                                .map(({ key, icon, color, glow, label, avg, count }) => {
+                                    const isOpen = expandedTopic === key;
+                                    return (
+                                        <div key={key} className="rounded-xl border border-slate-800/50 overflow-hidden transition-colors duration-150">
+                                            <div
+                                                onClick={() => toggleTopic(key)}
+                                                className="topic-row px-4 py-3 flex flex-col gap-2 cursor-pointer"
+                                            >
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <span className="text-lg" style={{ color }}>{icon}</span>
+                                                        <span className="text-slate-200 text-sm font-bold">{label}</span>
+                                                        <span className="mono text-[10px] text-slate-600 border border-slate-700/50 rounded-md px-1.5 py-0.5">{count} session{count > 1 ? "s" : ""}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="mono font-bold text-sm" style={{ color }}>{avg}</span>
+                                                        <span className="mono text-slate-600 text-xs">/10</span>
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                                                            className="text-slate-600 transition-transform duration-200"
+                                                            style={{ transform: isOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+                                                            <path d="M6 9l6 6 6-6" />
+                                                        </svg>
+                                                    </div>
+                                                </div>
+                                                <HBar value={avg} max={maxTopicAvg} color={color} glow={glow} height={5} />
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <span className="mono font-bold text-sm" style={{ color }}>{avg}</span>
-                                                <span className="mono text-slate-600 text-xs">/10</span>
-                                            </div>
+
+                                            {isOpen && (
+                                                <div className="border-t border-slate-800/60 bg-slate-950/40 px-4 py-3 flex flex-col gap-2">
+                                                    {loadingTopic === key ? (
+                                                        <div className="mono text-slate-600 text-xs py-3 text-center">Loading...</div>
+                                                    ) : (topicInterviews[key]?.length ?? 0) === 0 ? (
+                                                        <div className="mono text-slate-600 text-xs py-3 text-center">No interviews found.</div>
+                                                    ) : (
+                                                        topicInterviews[key].map((iv) => {
+                                                            const ivOpen = expandedInterview === iv._id;
+                                                            const report = interviewReports[iv._id];
+                                                            const scoreColor = (iv.finalScore || 0) >= 8 ? "#22d3ee" : (iv.finalScore || 0) >= 6 ? "#3b82f6" : "#f472b6";
+
+                                                            return (
+                                                                <div key={iv._id} className="rounded-lg border border-slate-800/50 overflow-hidden">
+                                                                    <div
+                                                                        onClick={() => toggleInterview(iv._id)}
+                                                                        className="px-3.5 py-2.5 flex items-center justify-between cursor-pointer hover:bg-slate-800/20 transition-colors"
+                                                                    >
+                                                                        <div className="flex items-center gap-3">
+                                                                            <span className="mono text-slate-500 text-[11px]">
+                                                                                {new Date(iv.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                                                                            </span>
+                                                                            <span className="mono text-slate-600 text-[10px]">{iv.currentQuestionIndex} question{iv.currentQuestionIndex !== 1 ? "s" : ""}</span>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <span className="mono font-bold text-xs" style={{ color: scoreColor }}>{(iv.finalScore || 0).toFixed(2)}/10</span>
+                                                                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"
+                                                                                className="text-slate-600 transition-transform duration-200"
+                                                                                style={{ transform: ivOpen ? "rotate(180deg)" : "rotate(0deg)" }}>
+                                                                                <path d="M6 9l6 6 6-6" />
+                                                                            </svg>
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {ivOpen && (
+                                                                        <div className="border-t border-slate-800/50 bg-slate-950/60 px-3.5 py-3">
+                                                                            {loadingReport === iv._id ? (
+                                                                                <div className="mono text-slate-600 text-xs py-3 text-center">Loading report...</div>
+                                                                            ) : !report ? (
+                                                                                <div className="mono text-slate-600 text-xs py-3 text-center">Failed to load.</div>
+                                                                            ) : (
+                                                                                <div className="flex flex-col gap-3">
+                                                                                    <div className="grid grid-cols-3 gap-3">
+                                                                                        {report.interview.topic === "DSA" ? (
+                                                                                            <>
+                                                                                                <MiniMetric label="Correctness" value={report.analytics.averageCorrectness} />
+                                                                                                <MiniMetric label="Test Pass %" value={report.analytics.averageTestCasePassPercentage} />
+                                                                                                <MiniMetric label="Code Quality" value={report.analytics.averageCodeQuality} />
+                                                                                            </>
+                                                                                        ) : (
+                                                                                            <>
+                                                                                                <MiniMetric label="Clarity" value={report.analytics.averageClarity} />
+                                                                                                <MiniMetric label="Depth" value={report.analytics.averageDepth} />
+                                                                                                <MiniMetric label="Correctness" value={report.analytics.averageCorrectness} />
+                                                                                            </>
+                                                                                        )}
+                                                                                    </div>
+
+                                                                                    <div className="flex flex-col gap-2">
+                                                                                        {report.questions.map((q, qi) => {
+                                                                                            const qOpen = expandedQuestion === q.id;
+                                                                                            return (
+                                                                                                <div key={q.id} className="rounded-md border border-slate-800/50 overflow-hidden">
+                                                                                                    <div
+                                                                                                        onClick={() => setExpandedQuestion(qOpen ? null : q.id)}
+                                                                                                        className="px-3 py-2.5 cursor-pointer hover:bg-slate-800/20 transition-colors"
+                                                                                                    >
+                                                                                                        <div className="flex items-center justify-between mb-1">
+                                                                                                            <span className="text-slate-300 text-xs font-semibold line-clamp-1" style={{ maxWidth: 380 }}>
+                                                                                                                Q{qi + 1}: {q.question}
+                                                                                                            </span>
+                                                                                                            <span className="mono text-[11px] font-bold text-slate-400">{q.score}/10</span>
+                                                                                                        </div>
+                                                                                                        {q.feedback && !qOpen && (
+                                                                                                            <p className="text-slate-500 text-[11px] leading-relaxed mt-1 line-clamp-1">{q.feedback}</p>
+                                                                                                        )}
+                                                                                                    </div>
+
+                                                                                                    {qOpen && (
+                                                                                                        <div className="border-t border-slate-800/50 bg-slate-950/50 px-3 py-3 flex flex-col gap-2.5">
+                                                                                                            {q.type === "code" ? (
+                                                                                                                q.code && (
+                                                                                                                    <div>
+                                                                                                                        <div className="mono text-slate-600 text-[10px] tracking-wide mb-1.5">
+                                                                                                                            YOUR CODE {q.language ? `(${q.language.toUpperCase()})` : ""}
+                                                                                                                        </div>
+                                                                                                                        <pre className="mono text-slate-300 text-[11px] leading-relaxed bg-slate-900/70 border border-slate-800/60 rounded-md p-3 overflow-x-auto whitespace-pre-wrap">
+                                                                                                                            {q.code}
+                                                                                                                        </pre>
+                                                                                                                    </div>
+                                                                                                                )
+                                                                                                            ) : (
+                                                                                                                q.userAnswer && (
+                                                                                                                    <div>
+                                                                                                                        <div className="mono text-slate-600 text-[10px] tracking-wide mb-1">YOUR ANSWER</div>
+                                                                                                                        <p className="text-slate-400 text-[11px] leading-relaxed">{q.userAnswer}</p>
+                                                                                                                    </div>
+                                                                                                                )
+                                                                                                            )}
+
+                                                                                                            {q.feedback && (
+                                                                                                                <div>
+                                                                                                                    <div className="mono text-blue-400/70 text-[10px] tracking-wide mb-1">FEEDBACK</div>
+                                                                                                                    <p className="text-slate-400 text-[11px] leading-relaxed">{q.feedback}</p>
+                                                                                                                </div>
+                                                                                                            )}
+
+                                                                                                            {q.weaknesses?.length > 0 && (
+                                                                                                                <div>
+                                                                                                                    <div className="mono text-rose-400/70 text-[10px] tracking-wide mb-1">WHAT WENT WRONG</div>
+                                                                                                                    {q.weaknesses.map((w, i) => (
+                                                                                                                        <p key={i} className="text-slate-400 text-[11px] leading-relaxed">✗ {w}</p>
+                                                                                                                    ))}
+                                                                                                                </div>
+                                                                                                            )}
+
+                                                                                                            {q.edgeCaseIssues?.length > 0 && (
+                                                                                                                <div>
+                                                                                                                    <div className="mono text-rose-400/70 text-[10px] tracking-wide mb-1">EDGE CASE ISSUES</div>
+                                                                                                                    {q.edgeCaseIssues.map((e, i) => (
+                                                                                                                        <p key={i} className="text-slate-400 text-[11px] leading-relaxed">⚠ {e}</p>
+                                                                                                                    ))}
+                                                                                                                </div>
+                                                                                                            )}
+
+                                                                                                            {q.conceptualGaps?.length > 0 && (
+                                                                                                                <div>
+                                                                                                                    <div className="mono text-amber-400/70 text-[10px] tracking-wide mb-1">CONCEPTUAL GAPS</div>
+                                                                                                                    <div className="flex flex-wrap gap-1.5">
+                                                                                                                        {q.conceptualGaps.map((g, i) => (
+                                                                                                                            <span key={i} className="mono text-[10px] text-amber-400 border border-amber-500/25 bg-amber-500/8 rounded px-2 py-0.5">{g}</span>
+                                                                                                                        ))}
+                                                                                                                    </div>
+                                                                                                                </div>
+                                                                                                            )}
+
+                                                                                                            {q.improvedAnswer && (
+                                                                                                                <div>
+                                                                                                                    <div className="mono text-indigo-400/70 text-[10px] tracking-wide mb-1.5">
+                                                                                                                        {q.type === "code" ? "IMPROVED CODE" : "IMPROVED ANSWER"}
+                                                                                                                    </div>
+                                                                                                                    {q.type === "code" ? (
+                                                                                                                        <pre className="mono text-slate-300 text-[11px] leading-relaxed bg-indigo-500/5 border border-indigo-500/20 rounded-md p-3 overflow-x-auto whitespace-pre-wrap">
+                                                                                                                            {q.improvedAnswer}
+                                                                                                                        </pre>
+                                                                                                                    ) : (
+                                                                                                                        <p className="text-slate-400 text-[11px] leading-relaxed">{q.improvedAnswer}</p>
+                                                                                                                    )}
+                                                                                                                </div>
+                                                                                                            )}
+                                                                                                        </div>
+                                                                                                    )}
+                                                                                                </div>
+                                                                                            );
+                                                                                        })}
+                                                                                    </div>
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })
+                                                    )}
+                                                </div>
+                                            )}
                                         </div>
-                                        <HBar value={avg} max={maxTopicAvg} color={color} glow={glow} height={5} />
-                                    </div>
-                                ))}
+                                    );
+                                })}
 
                             {/* Empty topics */}
                             {Object.entries(topics)

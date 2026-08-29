@@ -7,7 +7,6 @@ const evaluateAnswer = require("../services/evaluateAnswer");
 const getNextDifficulty = require("../utils/getNextDifficulty");
 const NormalizeConceptualGaps = require("../services/conceptualGapNormalization");
 
-let totalQuestions = 0;
 
 router.post('/start', authMiddleware, async (req, res) => {
     try {
@@ -40,12 +39,12 @@ router.post('/start', authMiddleware, async (req, res) => {
             status: "in-progress"
         });
 
-        if (existingPending) {
-            return res.status(400).json({
-                success: false,
-                message: "You already have a pending interview"
-            });
-        }
+        // if (existingPending) {
+        //     return res.status(400).json({
+        //         success: false,
+        //         message: "You already have a pending interview"
+        //     });
+        // }
 
         const question = await generateQuestion(topic, normalizedDifficulty);
 
@@ -86,6 +85,8 @@ router.post('/start', authMiddleware, async (req, res) => {
 
     }
 });
+
+// authMiddleware,
 
 router.post('/answer', authMiddleware, async (req, res) => {
     try {
@@ -389,7 +390,7 @@ router.get("/history", authMiddleware, async (req, res) => {
 
         const [interviews, total] = await Promise.all([
             Interview.find({
-                user: req.user._id,
+                user: req.user,
                 status: "completed"
             })
                 .sort({ createdAt: -1 })
@@ -399,7 +400,7 @@ router.get("/history", authMiddleware, async (req, res) => {
                 .lean(),
 
             Interview.countDocuments({
-                user: req.user._id,
+                user: req.user,
                 status: "completed"
             })
         ]);
@@ -561,19 +562,25 @@ router.get("/report/:id", authMiddleware, async (req, res) => {
         const formattedQuestions = questions.map(q => ({
 
             id: q._id,
+            type: q.type,
             question: q.question,
             difficulty: q.difficulty,
             userAnswer: q.userAnswer,
+            language: q.language,
+            code: q.code,
             clarity: q.clarity,
             depth: q.depth,
             correctness: q.correctness,
-            testCasePassPercentage: Number(((q.passedTestCases / q.totalTestCases) * 100).toFixed(2)),
+            testCasePassPercentage: q.totalTestCases
+                ? Number(((q.passedTestCases / q.totalTestCases) * 100).toFixed(2))
+                : null,
             score: q.score,
-            readability: q.codeQuality?.readability * 10,
-            modularity: q.codeQuality?.modularity * 10,
-            naming: q.codeQuality?.naming * 10,
+            readability: q.codeQuality?.readability != null ? q.codeQuality.readability * 10 : null,
+            modularity: q.codeQuality?.modularity != null ? q.codeQuality.modularity * 10 : null,
+            naming: q.codeQuality?.naming != null ? q.codeQuality.naming * 10 : null,
             strengths: q.strengths,
             weaknesses: q.weaknesses,
+            edgeCaseIssues: q.edgeCaseIssues,
             conceptualGaps: q.conceptualGaps,
             feedback: q.feedback,
             improvedAnswer: q.improvedAnswer

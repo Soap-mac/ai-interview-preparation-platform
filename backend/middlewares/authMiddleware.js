@@ -4,7 +4,6 @@ const protect = async (req, res, next) => {
     console.log("authMiddleware 1");
     const token = req.cookies.AccessToken;
     console.log(token);
-    // console.log(req.cookies);
     if (!token) {
         return res.status(401).json({
             success: false,

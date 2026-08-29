@@ -45,7 +45,7 @@ Return JSON in this EXACT structure:
     "naming": number
   },
   "feedback": "string",
-  "improvedCode":"string",
+  "improvedCode":"string"
 }
 
 Problem:
@@ -59,42 +59,57 @@ Testcase Results:
 ${JSON.stringify(results, null, 2)}
 `;
     try {
-        const response = await groq.responses.create({
-            model: "llama-3.3-70b-versatile",
-            input: feedbackPrompt,
-            temperature: 0.2
+        const response = await groq.chat.completions.create({
+            model: "openai/gpt-oss-20b",
+            max_tokens: 4500,
+            temperature: 0.2,
+            messages: [
+                { role: "system", content: "Return ONLY valid JSON. No markdown, no backticks, no explanation outside JSON." },
+                { role: "user", content: feedbackPrompt }
+            ],
+            response_format: {
+                type: "json_schema",
+                json_schema: {
+                    name: "dsa_evaluation",
+                    strict: true,
+                    schema: {
+                        type: "object",
+                        properties: {
+                            score: { type: "number" },
+                            verdict: { type: "string", enum: ["PASS", "FAIL"] },
+                            timeComplexity: { type: "string" },
+                            spaceComplexity: { type: "string" },
+                            strengths: { type: "array", items: { type: "string" } },
+                            weaknesses: { type: "array", items: { type: "string" } },
+                            edgeCaseIssues: { type: "array", items: { type: "string" } },
+                            optimizationSuggestions: { type: "array", items: { type: "string" } },
+                            codeQuality: {
+                                type: "object",
+                                properties: {
+                                    readability: { type: "number" },
+                                    modularity: { type: "number" },
+                                    naming: { type: "number" }
+                                },
+                                required: ["readability", "modularity", "naming"],
+                                additionalProperties: false
+                            },
+                            feedback: { type: "string" },
+                            improvedCode: { type: "string" }
+                        },
+                        required: [
+                            "score", "verdict", "timeComplexity", "spaceComplexity",
+                            "strengths", "weaknesses", "edgeCaseIssues",
+                            "optimizationSuggestions", "codeQuality", "feedback", "improvedCode"
+                        ],
+                        additionalProperties: false
+                    }
+                }
+            }
         });
 
-        let raw = response.output_text.trim();
-
-        raw = raw.replace(/```json|```/g, "").trim();
-
-        let parsed;
-
-        try {
-            parsed = JSON.parse(raw);
-        } catch (err) {
-            console.error("JSON parse failed. Raw output:", raw);
-
-            parsed = {
-                score: 0,
-                verdict: "FAIL",
-                timeComplexity: "Unknown",
-                spaceComplexity: "Unknown",
-                strengths: [],
-                weaknesses: ["AI response parsing failed"],
-                edgeCaseIssues: [],
-                optimizationSuggestions: [],
-                codeQuality: {
-                    readability: 0,
-                    modularity: 0,
-                    naming: 0
-                },
-                feedback: "AI evaluation failed to parse."
-            };
-        }
-
+        const parsed = JSON.parse(response.choices[0].message.content);
         return parsed;
+
     } catch (error) {
         console.error("AI evaluation failed:", error);
 

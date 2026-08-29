@@ -48,7 +48,7 @@ router.post("/signup", async (req, res) => {
 
 
 
-        const Accesstoken = jwt.sign({ id: newUser._id }, process.env.JWT_ACCESS_SECRET, { expiresIn: '15m' });
+        const Accesstoken = jwt.sign({ id: newUser._id }, process.env.JWT_ACCESS_SECRET, { expiresIn: '15d' });
         const Refreshtoken = jwt.sign({ id: newUser._id }, process.env.JWT_REFRESH_SECRET, { expiresIn: '15d' });
 
         const hashRefreshToken = await bcrypt.hash(Refreshtoken, 10);
@@ -60,7 +60,7 @@ router.post("/signup", async (req, res) => {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
             sameSite: "strict",
-            maxAge: 15 * 60 * 1000,
+            maxAge: 15 * 24 * 60 * 60 * 1000,
 
         });
         res.cookie('RefreshToken', Refreshtoken, {
@@ -114,7 +114,7 @@ router.post('/login', async (req, res) => {
             })
         }
 
-        const Accesstoken = jwt.sign({ id: exist._id }, process.env.JWT_ACCESS_SECRET, { expiresIn: '15m' });
+        const Accesstoken = jwt.sign({ id: exist._id }, process.env.JWT_ACCESS_SECRET, { expiresIn: '15d' });
         const Refreshtoken = jwt.sign({ id: exist._id }, process.env.JWT_REFRESH_SECRET, { expiresIn: '15d' });
 
         const hashRefreshToken = await bcrypt.hash(Refreshtoken, 10);
@@ -127,7 +127,7 @@ router.post('/login', async (req, res) => {
             httpOnly: true,
             secure: process.env.NODE_ENV === "production",
             sameSite: "strict",
-            maxAge: 15 * 60 * 1000,
+            maxAge: 15 * 24 * 60 * 60 * 1000,
 
         });
         res.cookie('RefreshToken', Refreshtoken, {

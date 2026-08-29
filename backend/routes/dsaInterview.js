@@ -7,6 +7,45 @@ const axios = require("axios");
 const evaluateDSA = require("../services/evaluateDSA");
 const getNextDifficulty = require("../utils/getNextDifficulty");
 const buildFinalCode = require("../utils/buildFinalCode");
+const { parseValue, deepEqual } = require("../utils/compareOutput");
+const path = require('path')
+
+
+// Test Route
+router.post("/dsa/start-test", authMiddleware, async (req, res) => {
+    try {
+        const { questionNo, questionFile } = req.body;
+        const fileName = questionFile || "question1.json";
+
+        delete require.cache[require.resolve(`../testData/${fileName}`)];
+        const question = require(`../testData/${fileName}`);
+
+        const interview = await Interview.create({
+            user: req.user,
+            topic: "DSA",
+            totalQuestions: questionNo || 1,
+            questions: [
+                {
+                    question: question.description,
+                    difficulty: question.difficulty.toLowerCase(),
+                    type: "code",
+                    metadata: question,
+                }
+            ]
+        });
+
+        return res.json({
+            interviewId: interview._id,
+            question
+        });
+
+    } catch (err) {
+        console.log(err);
+        res.status(500).json({ message: "Failed to start test interview" });
+    }
+});
+
+// till here it is test route
 
 router.post("/dsa/start", authMiddleware, async (req, res) => {
     try {
@@ -24,7 +63,7 @@ router.post("/dsa/start", authMiddleware, async (req, res) => {
             questions: [
                 {
                     question: question.description,
-                    difficulty: question.difficulty,
+                    difficulty: question.difficulty.toLowerCase(),
                     type: "code",
                     metadata: question,
                 }
@@ -110,44 +149,12 @@ router.post("/run", async (req, res) => {
         const driver = question.metadata.driverCode[language];
         if (!driver) throw new Error("Driver code missing");
 
+        console.log("=== DRIVER CODE FOR", language, "===");
+        console.log(driver);
+        console.log("=== END DRIVER ===");
         const finalCode = buildFinalCode(driver, code, language);
 
-        // const safeDriver = driver.replace(/split\(\/s\+\/\)/g, "split(/\\s+/)");
-        // // console.log("Old code", code);
-        // let finalCode = safeDriver.replace(`// Write your code here`, code);
-        // // console.log("final code", finalCode);
 
-        // // this extra things is i am adding for streams related or the class+function answer
-        // finalCode = finalCode.replace(
-        //     /const (\w+) = tokens\.slice\((\d+|\w+(?:[+\-]\d+)?)\)\.map\(Number\);/g,
-        //     `const $1 = tokens.slice($2).join(' ');`
-        // );
-
-        const normalizeArray = (str) => {
-            console.log(str)
-            if (!str) return "";
-
-            let s = str.replace(/\n/g, '').replace(/\s+/g, '').trim();
-
-            s = s.replace(/\.\.\.(\d+)moreitems/g, '');
-
-            s = s.replace(/'/g, '"');
-            if (!(s.startsWith('[') && s.endsWith(']'))) {
-                try {
-                    const parsed = JSON.parse(s);
-                    if (typeof parsed === 'string' || typeof parsed === 'number' || typeof parsed === 'boolean') {
-                        s = String(parsed);
-                    }
-                } catch {
-
-                }
-            }
-            if (s.startsWith('[') && s.endsWith(']')) {
-                const elements = s.slice(1, -1).split(',').filter(Boolean).sort();
-                return `[${elements.join(',')}]`;
-            }
-            return s;
-        };
 
         const results = [];
 
@@ -155,16 +162,14 @@ router.post("/run", async (req, res) => {
             try {
                 const output = await executeCode(finalCode, tc.input, language);
 
-                const newOutput = normalizeArray(output);
-                const newExpected = normalizeArray(tc.output ?? tc.expected);
-
-                console.log("NORMALIZED OUTPUT:", newOutput);
-                console.log("NORMALIZED EXPECTED:", newExpected);
+                const outVal = parseValue(output);
+                const expVal = parseValue(tc.output ?? tc.expected);
 
                 results.push({
                     input: tc.input,
-                    expected: newExpected,
-                    output: newOutput,
+                    expected: JSON.stringify(expVal),
+                    output: JSON.stringify(outVal),
+                    passed: deepEqual(outVal, expVal),
                 });
             } catch (err) {
                 results.push({
@@ -174,6 +179,8 @@ router.post("/run", async (req, res) => {
                 });
             }
         }
+
+        console.log(results)
 
         res.json({ results });
 
@@ -207,21 +214,7 @@ router.post("/submitDSA", authMiddleware, async (req, res) => {
             `const $1 = tokens.slice($2).join(' ');`
         );
 
-        const normalizeArray = (str) => {
-            if (!str) return "";
 
-            let s = str.replace(/\n/g, '').replace(/\s+/g, '').trim();
-
-            s = s.replace(/\.\.\.(\d+)moreitems/g, '');
-
-            s = s.replace(/'/g, '"');
-
-            if (s.startsWith('[') && s.endsWith(']')) {
-                const elements = s.slice(1, -1).split(',').filter(Boolean).sort();
-                return `[${elements.join(',')}]`;
-            }
-            return s;
-        };
 
         let passedCount = 0;
         const results = [];
@@ -230,17 +223,16 @@ router.post("/submitDSA", authMiddleware, async (req, res) => {
             try {
                 const output = await executeCode(finalCode, tc.input, language);
 
-                const newOutput = normalizeArray(output);
-                const newExpected = normalizeArray(tc.output ?? tc.expected);
-
-                const passed = newOutput === newExpected;
+                const outVal = parseValue(output);
+                const expVal = parseValue(tc.output ?? tc.expected);
+                const passed = deepEqual(outVal, expVal);
 
                 if (passed) passedCount++;
 
                 results.push({
                     input: tc.input,
-                    expected: newExpected,
-                    output: newOutput,
+                    expected: JSON.stringify(expVal),
+                    output: JSON.stringify(outVal),
                     passed
                 });
             } catch (err) {
@@ -309,7 +301,7 @@ router.post("/submitDSA", authMiddleware, async (req, res) => {
         interview.questions.push(
             {
                 question: newQuestion.description,
-                difficulty: newQuestion.difficulty,
+                difficulty: newQuestion.difficulty.toLowerCase(),
                 type: "code",
                 metadata: newQuestion,
             }

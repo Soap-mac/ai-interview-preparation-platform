@@ -1,0 +1,56 @@
+{
+    "title": "Count Pairs With Given Sum",
+    "difficulty": "Easy",
+    "topic": "Two Pointers",
+    "description": "Given an array of integers and a target sum, count how many pairs of indices (i, j) with i < j have arr[i] + arr[j] equal to the target.",
+    "InputFormat": "Line 1: n (array length)\nLine 2: n space-separated integers (the array)\nLine 3: target integer",
+    "constraints": [
+        "1 <= n <= 100000",
+        "-10^9 <= arr[i], target <= 10^9"
+    ],
+    "referenceSolution": "import sys\n\ndef solve(arr, target):\n    seen = {}\n    count = 0\n    for x in arr:\n        need = target - x\n        if need in seen:\n            count += seen[need]\n        seen[x] = seen.get(x, 0) + 1\n    return count\n\ndata = sys.stdin.read().split()\nn = int(data[0])\narr = list(map(int, data[1:1+n]))\ntarget = int(data[1+n])\nprint(solve(arr, target))",
+    "examples": [
+        {
+            "input": "5\n1 2 3 4 3\n6",
+            "output": "2",
+            "explanation": "Pairs (2,4) and (3,3-index) sum to 6: (2,4) and (3 at index2, 3 at index4)."
+        },
+        {
+            "input": "4\n-1 -2 3 0\n-3",
+            "output": "1",
+            "explanation": "Only pair (-1,-2) sums to -3."
+        }
+    ],
+    "testcases": [
+        {
+            "id": 1,
+            "label": "Case 1",
+            "input": "3\n1 1 1\n2",
+            "expected": "3"
+        },
+        {
+            "id": 2,
+            "label": "Case 2",
+            "input": "1\n5\n10",
+            "expected": "0"
+        },
+        {
+            "id": 3,
+            "label": "Case 3",
+            "input": "6\n0 0 0 0 0 0\n0",
+            "expected": "15"
+        }
+    ],
+    "functionSignature": {
+        "javascript": "function solve(arr, target) {\n  // Write your code here\n}",
+        "python": "def solve(arr, target):\n    # Write your code here\n    pass",
+        "cpp": "long long solve(vector<int> arr, int target) {\n    // Write your code here\n}",
+        "java": "public static long solve(int[] arr, int target) {\n    // Write your code here\n    return 0;\n}"
+    },
+    "driverCode": {
+        "javascript": "const tokens = INPUT_STRING.trim().split(/\\s+/);\nconst n = parseInt(tokens[0]);\nconst arr = tokens.slice(1, 1 + n).map(Number);\nconst target = parseInt(tokens[1 + n]);\n// Write your code here\nconst result = solve(arr, target);\nconsole.log(JSON.stringify(result));",
+        "python": "import json\ndata = INPUT_STRING.strip().split()\nn = int(data[0])\narr = list(map(int, data[1:1+n]))\ntarget = int(data[1+n])\n# Write your code here\nresult = solve(arr, target)\nprint(result)",
+        "cpp": "#include <bits/stdc++.h>\nusing namespace std;\n\n// Write your code here\n\nint main() {\n    string inputStr = INPUT_STRING;\n    istringstream iss(inputStr);\n    int n;\n    iss >> n;\n    vector<int> arr(n);\n    for (int i = 0; i < n; ++i) iss >> arr[i];\n    int target;\n    iss >> target;\n    long long result = solve(arr, target);\n    cout << result << endl;\n    return 0;\n}",
+        "java": "import java.util.*;\n\npublic class Solution {\n    public static void main(String[] args) {\n        String inputStr = INPUT_STRING;\n        String[] tokens = inputStr.trim().split(\"\\\\s+\");\n        int n = Integer.parseInt(tokens[0]);\n        int[] arr = new int[n];\n        for (int i = 0; i < n; i++) arr[i] = Integer.parseInt(tokens[1 + i]);\n        int target = Integer.parseInt(tokens[1 + n]);\n        long result = solve(arr, target);\n        System.out.println(result);\n    }\n\n    // Write your code here\n}"
+    }
+}
