@@ -112,7 +112,7 @@ export default function AnalyticsDashboard() {
         if (!topicInterviews[topicKey]) {
             setLoadingTopic(topicKey);
             try {
-                const res = await axios.get(`http://localhost:8000/api/interview/history`, {
+                const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/interview/history`, {
                     params: { limit: 50 },
                     withCredentials: true,
                 });
@@ -139,7 +139,7 @@ export default function AnalyticsDashboard() {
         if (!interviewReports[interviewId]) {
             setLoadingReport(interviewId);
             try {
-                const res = await axios.get(`http://localhost:8000/api/interview/report/${interviewId}`, {
+                const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/interview/report/${interviewId}`, {
                     withCredentials: true,
                 });
                 if (res.data.success) {
@@ -165,7 +165,7 @@ export default function AnalyticsDashboard() {
 
     useEffect(() => {
         const fetchQuestion = async () => {
-            const res = await axios.get(`http://localhost:8000/api/interview/analytics/overall`, {
+            const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/interview/analytics/overall`, {
                 withCredentials: true,
             });
 

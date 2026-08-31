@@ -361,7 +361,7 @@ export default function InterviewReport() {
     useEffect(() => {
         const interviewData = async () => {
             try {
-                const res = await axios.get(`http://localhost:8000/api/interview/report/${id}`, {
+                const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/interview/report/${id}`, {
                     withCredentials: true,
                 });
                 setData(res.data);

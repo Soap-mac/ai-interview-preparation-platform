@@ -29,7 +29,7 @@ export default function InterviewSession() {
     useEffect(() => {
         const fetchQuestion = async () => {
             // /:id/current
-            const res = await axios.get(`http://localhost:8000/api/interview/${InterviewId}/current`,
+            const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/interview/${InterviewId}/current`,
                 {
                     withCredentials: true,
                 }
@@ -65,7 +65,7 @@ export default function InterviewSession() {
             questionId: qId,
         }
         if (qIndex + 1 >= totalQuestions) {
-            const res = await axios.post(`http://localhost:8000/api/interview/answer`, answerData, {
+            const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/interview/answer`, answerData, {
                 withCredentials: true
             });
             setSubmitted(true);
@@ -75,7 +75,7 @@ export default function InterviewSession() {
             // console.log(qId);
 
 
-            const res = await axios.post(`http://localhost:8000/api/interview/answer`, answerData, {
+            const res = await axios.post(`${import.meta.env.VITE_API_URL}/api/interview/answer`, answerData, {
                 withCredentials: true
             });
             setQuestion(res.data.question);
