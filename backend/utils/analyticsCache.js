@@ -1,6 +1,6 @@
-
+// Simple in-memory cache for the /analytics/overall response, keyed per user.
 const cache = new Map();
-const TTL_MS = 10 * 60 * 1000; // 10-minute safety-net expiry, in case an invalidation call is ever missed
+const TTL_MS = 10 * 60 * 1000; // 10-minute safety-net expiry
 
 const getCachedAnalytics = (userId) => {
     const key = String(userId);

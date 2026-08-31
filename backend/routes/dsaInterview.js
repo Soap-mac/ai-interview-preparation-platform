@@ -8,7 +8,7 @@ const evaluateDSA = require("../services/evaluateDSA");
 const getNextDifficulty = require("../utils/getNextDifficulty");
 const buildFinalCode = require("../utils/buildFinalCode");
 const { parseValue, deepEqual } = require("../utils/compareOutput");
-const { invalidateAnalyticsCache } = require("../utils/Analyticscache");
+const { invalidateAnalyticsCache } = require("../utils/analyticsCache");
 const path = require('path')
 
 
