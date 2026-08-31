@@ -2,8 +2,14 @@ const groq = require("../utils/aiClient");
 
 const generateQuestion = async (topic, difficulty, previousQuestions = []) => {
 
-    const history = previousQuestions.length
-        ? previousQuestions.map((q, i) => `${i + 1}. ${q}`).join("\n")
+    const historyList = (previousQuestions || []).map(q => {
+        if (typeof q === "string") return q;
+        if (q && typeof q === "object" && typeof q.question === "string") return q.question;
+        return null;
+    }).filter(Boolean);
+
+    const history = historyList.length
+        ? historyList.map((q, i) => `${i + 1}. ${q}`).join("\n")
         : "None";
 
     const prompt = `
@@ -40,30 +46,36 @@ ${history}
 `;
 
     try {
-
-        const res = await groq.responses.create({
+        const res = await groq.chat.completions.create({
             model: "openai/gpt-oss-20b",
-            input: prompt,
-            temperature: 0.4
+            max_tokens: 300,
+            temperature: 0.4,
+            messages: [
+                { role: "system", content: "Return ONLY the question. Plain text only — no numbering, no explanations, no extra text, no markdown." },
+                { role: "user", content: prompt }
+            ]
         });
-        console.log("FULL AI RESPONSE:");
-        console.dir(res, { depth: null });
 
-        if (!res.output_text) {
+        const rawQuestion = res?.choices?.[0]?.message?.content;
+
+        if (!rawQuestion || !rawQuestion.trim()) {
             throw new Error("AI returned empty question");
         }
 
-        let question = res?.output_text?.trim();
-
-        question = question
+        const question = rawQuestion
+            .trim()
             .replace(/^["']|["']$/g, "")
             .replace(/^Question:\s*/i, "")
             .trim();
 
+        if (!question) {
+            throw new Error("AI returned empty question after cleanup");
+        }
+
         return question;
 
     } catch (error) {
-        console.error("Question generation failed:", error);
+        console.error("Question generation failed:", error.message);
         throw new Error("AI question generation failed");
     }
 };

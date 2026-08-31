@@ -1,6 +1,11 @@
+
 const groq = require("../utils/aiClient");
 
 const checkTestCases = async (code, language, testcases) => {
+    if (!Array.isArray(testcases) || testcases.length === 0) {
+        return { allPassed: false, passedCount: 0, totalCount: 0, results: [] };
+    }
+
     try {
         const results = await Promise.all(
             testcases.map(async (tc, index) => {
@@ -27,8 +32,8 @@ ${code}`,
                     temperature: 0,
                 });
 
-                const stdout = response.choices[0].message.content.trim();
-                const expected = tc.expected.trim();
+                const stdout = (response?.choices?.[0]?.message?.content || "").trim();
+                const expected = (tc.expected || "").trim();
                 const passed = stdout === expected;
 
                 return {
@@ -44,10 +49,6 @@ ${code}`,
         const allPassed = results.every((r) => r.passed);
         const passedCount = results.filter((r) => r.passed).length;
 
-        console.log(results);
-        console.log(allPassed);
-        console.log(passedCount);
-
         return {
             allPassed,
             passedCount,
@@ -59,42 +60,5 @@ ${code}`,
         throw new Error("Failed to check test cases");
     }
 };
-
-const code = `n, target = map(int, input().split())
-nums = list(map(int, input().split()))
-
-seen = {}
-for i, num in enumerate(nums):
-    diff = target - num
-    if diff in seen:
-        print(seen[diff], i)
-        break
-    seen[num] = i`;
-
-const language = "python";
-const testcases = [
-    {
-        "input": "4 9\n2 7 11 15",
-        "expected": "0 1"
-    },
-    {
-        "input": "3 6\n3 2 4",
-        "expected": "1 2"
-    },
-    {
-        "input": "2 6\n3 3",
-        "expected": "0 1"
-    },
-    {
-        "input": "5 0\n-3 4 3 90 -1",
-        "expected": "0 2"
-    },
-    {
-        "input": "6 100\n10 20 30 40 50 60",
-        "expected": "3 5"
-    }
-];
-
-checkTestCases(code, language, testcases);
 
 module.exports = checkTestCases;

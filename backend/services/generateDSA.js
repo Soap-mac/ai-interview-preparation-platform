@@ -1,5 +1,3 @@
-
-
 const groq = require("../utils/aiClient");
 const fetch = require("node-fetch");
 const { runOnPiston } = require("../utils/pistonRunner");
@@ -27,9 +25,8 @@ const fixJavaRegexEscaping = (javaCode) => {
   return javaCode.replace(/"\\s\+"/g, '"\\\\s+"');
 };
 
-
 const getTrueExpectedOutput = async (pythonCode, inputStr) => {
-  return runOnPiston(pythonCode, "python", inputStr.trim());
+  return runOnPiston(pythonCode, "python", (inputStr || "").trim());
 };
 
 const fixReferenceSolution = async (brokenSolution, stderr, topic, difficulty) => {
@@ -42,19 +39,19 @@ const fixReferenceSolution = async (brokenSolution, stderr, topic, difficulty) =
       {
         role: "user",
         content: `
-You are a Python expert. The following Python reference solution for a ${difficulty} ${topic} DSA problem has a runtime error.
+You are a Python expert. The following Python reference solution for a ${difficulty} ${topic} DSA problem is INCORRECT — either it crashes, or it produces the wrong output compared to a known-correct expected value.
 
 BROKEN SOLUTION:
 \`\`\`python
 ${brokenSolution}
 \`\`\`
 
-PYTHON ERROR:
+PROBLEM WITH THIS SOLUTION:
 ${stderr}
 
 Fix the solution so it:
 1. Reads input using: data = sys.stdin.read().split()
-2. Computes the correct output
+2. Computes the CORRECT output for the problem (re-derive the correct algorithm/logic if the previous logic was wrong, don't just fix syntax)
 3. Prints ONLY the final result
 4. Has no syntax or runtime errors
 5. Uses actual newlines and 4-space indentation (NO semicolons)
@@ -84,10 +81,18 @@ Return ONLY this JSON:
 
   const parsed = JSON.parse(res.choices[0].message.content);
   if (!parsed.referenceSolution) throw new Error("AI failed to produce a fixed solution");
-  return parsed.referenceSolution;
+  return unescapeNewlines(parsed.referenceSolution);
 };
 
 // ── Prompt Builder ──
+// NOTE ON TRIMMING: the JavaScript/Python driver rules and the Function
+// Signature rules below were shortened to remove prose that duplicated
+// what the templates already show concretely. The Java and C++ driver
+// rules and the Failure Conditions checklist are LEFT UNCHANGED on
+// purpose — every constraint in those two sections maps directly to a
+// real bug we hit in production today (Scanner vs INPUT_STRING, solve()
+// being pre-declared, placeholder counts, nested function definitions).
+// Do not trim those further without re-testing extensively.
 const buildPrompt = (difficulty, topic, history) => `
 You are a senior DSA interviewer and problem setter.
 
@@ -136,6 +141,7 @@ EXAMPLES + TESTCASES
 - Inputs must be valid and consistent with InputFormat
 - Avoid trivial or repeated cases
 - Keep inputs small enough to verify manually
+- CRITICAL: For each example, the "output" field must be the exact correct result you get by reasoning through the problem statement directly, BEFORE writing referenceSolution. Compute it carefully and independently — this value will be checked against what your referenceSolution actually produces, and a mismatch means the question will be rejected and regenerated. Do not just guess or copy a number without verifying it against your own explanation.
 
 -----------------------------------
 !! CRITICAL: DRIVER CODE RULES !!
@@ -144,13 +150,9 @@ The driver code will have the user's INPUT injected as a variable called INPUT_S
 INPUT_STRING is a raw string containing all input tokens separated by spaces/newlines.
 
 JAVASCRIPT DRIVER CODE RULES:
-- Start with: const tokens = INPUT_STRING.trim().split(/\s+/);
-- Parse tokens to get all variables needed by solve()
-- Call solve() with the parsed variables
-- Print result using EXACTLY: console.log(JSON.stringify(result))
-- The placeholder "// Write your code here" MUST appear exactly once
-- DO NOT use fs, require, readline, or process.stdin anywhere
-- DO NOT use console.log anywhere except the final result line
+- The placeholder "// Write your code here" must appear EXACTLY once.
+- DO NOT use fs, require, readline, or process.stdin anywhere.
+- The ONLY console.log allowed is the final result line, using EXACTLY: console.log(JSON.stringify(result))
 
 JAVASCRIPT DRIVER TEMPLATE (follow this structure exactly):
 const tokens = INPUT_STRING.trim().split(/\s+/);
@@ -160,12 +162,9 @@ const result = solve(...parsed variables...);
 console.log(JSON.stringify(result));
 
 PYTHON DRIVER CODE RULES:
-- Start with: data = INPUT_STRING.strip().split()
-- Parse data to get all variables needed by solve()
-- Call solve() with the parsed variables
-- Print result using: print(json.dumps(result)) for arrays, print(result) for numbers/strings
-- The placeholder "# Write your code here" MUST appear exactly once
-- DO NOT use sys, input(), or stdin anywhere
+- The placeholder "# Write your code here" must appear EXACTLY once.
+- DO NOT use sys, input(), or stdin anywhere.
+- Print using: print(json.dumps(result)) for arrays, print(result) for numbers/strings.
 
 PYTHON DRIVER TEMPLATE:
 import json
@@ -189,7 +188,6 @@ JAVA DRIVER CODE RULES:
 - The placeholder MUST appear exactly once in the entire driver file.
 - DO NOT include a separate public class other than Solution
 - DO NOT use any external libraries beyond java.util.* and java.io.*
-
 
 JAVA DRIVER TEMPLATE (follow this structure exactly — note solve() is NOT defined here, only called):
 import java.util.*;
@@ -238,25 +236,15 @@ int main() {
 -----------------------------------
 FUNCTION SIGNATURE RULES
 -----------------------------------
-- functionSignature is the STARTER CODE shown to the user in the editor
-- It must contain ONLY the solve() function with "// Write your code here" inside
-- DO NOT include driver code inside functionSignature
-- DO NOT include INPUT_STRING inside functionSignature
-- For C++ specifically: driverCode.cpp must NOT pre-declare or define solve() anywhere. The placeholder in driverCode.cpp is a bare top-level marker before main(); the user's full function (as shown in functionSignature.cpp) gets inserted there directly, becoming the actual solve() definition.
-- For Java specifically: functionSignature.java must contain ONLY the solve() method signature — NO "public class Solution" wrapper. The class already exists in driverCode.java; the method will be inserted directly inside it.
-- JavaScript example:
-  function solve(nums, target) {
-    // Write your code here
-  }
-- Python example:
-  def solve(nums, target):
-      # Write your code here
-      pass
+- functionSignature is the STARTER CODE shown to the user in the editor: ONLY the solve() function/method with "// Write your code here" inside — NO driver code, NO INPUT_STRING.
+- C++: driverCode.cpp must NOT pre-declare or define solve() anywhere. The placeholder there is a bare top-level marker before main(); the user's full function (as shown in functionSignature.cpp) is inserted there directly, becoming the actual solve() definition.
+- Java: functionSignature.java must contain ONLY the solve() method signature — NO "public class Solution" wrapper (the class already exists in driverCode.java).
 
-- Java example (method only — NO class wrapper):
-  public static int solve(int[] nums, int target) {
-      // Write your code here
-  }
+Examples:
+  JavaScript: function solve(nums, target) {\n    // Write your code here\n  }
+  Python: def solve(nums, target):\n      # Write your code here\n      pass
+  Java (method only, no class wrapper): public static int solve(int[] nums, int target) {\n      // Write your code here\n  }
+
 -----------------------------------
 INPUT FORMAT RULES
 -----------------------------------
@@ -283,23 +271,42 @@ FAILURE CONDITIONS (DO NOT VIOLATE)
 Return ONLY the JSON object. Nothing else.
 `;
 
+const normalizeForCompare = (str) => (str || "").replace(/\s+/g, " ").trim();
+
 const verifyWithSelfHealing = async (parsed, maxFixes = 2) => {
   let solution = parsed.referenceSolution;
 
   for (let fixAttempt = 0; fixAttempt <= maxFixes; fixAttempt++) {
     try {
-      const verifiedExamples = [];
-      for (const ex of parsed.examples) {
-        const output = await getTrueExpectedOutput(solution, ex.input);
-        console.log(`  ✓ Example verified: input="${ex.input}" → output="${output}"`);
-        verifiedExamples.push({ ...ex, output });
-      }
+      const verifiedExamples = await Promise.all(
+        (parsed.examples || []).map(async (ex) => {
+          const computedOutput = await getTrueExpectedOutput(solution, ex.input);
+          const statedOutput = ex.output;
+
+          // Cross-check: does the code's real output match what the AI itself
+          // reasoned the answer should be, when it wrote the example?
+          if (
+            statedOutput &&
+            normalizeForCompare(computedOutput) !== normalizeForCompare(statedOutput)
+          ) {
+            throw new Error(
+              `Reference solution mismatch on example (input="${ex.input}"): ` +
+              `the code computed "${computedOutput}" but the example's own stated ` +
+              `expected output was "${statedOutput}". This means the reference ` +
+              `solution's logic is likely wrong for this problem.`
+            );
+          }
+
+          console.log(`  ✓ Example verified: input="${ex.input}" → output="${computedOutput}"`);
+          return { ...ex, output: computedOutput };
+        })
+      );
 
       const verifiedTestcases = await Promise.all(
-        parsed.testcases.map(async (tc, i) => {
+        (parsed.testcases || []).map(async (tc, i) => {
           const expected = await getTrueExpectedOutput(solution, tc.input);
           console.log(`  ✓ Testcase ${i + 1} verified: input="${tc.input}" → expected="${expected}"`);
-          return { id: i + 1, label: `Case ${i + 1}`, input: tc.input.trim(), expected };
+          return { id: i + 1, label: `Case ${i + 1}`, input: (tc.input || "").trim(), expected };
         })
       );
 
@@ -317,7 +324,8 @@ const verifyWithSelfHealing = async (parsed, maxFixes = 2) => {
         throw err;
       }
 
-      console.warn(`  ✗ Execution failed: ${err.message}`); console.log(`  → Fix attempt ${fixAttempt + 1}/${maxFixes}...`);
+      console.warn(`  ✗ Verification failed: ${err.message}`);
+      console.log(`  → Fix attempt ${fixAttempt + 1}/${maxFixes}...`);
       solution = await fixReferenceSolution(solution, err.stderr || err.message, parsed.topic, parsed.difficulty);
     }
   }
@@ -448,7 +456,16 @@ const generateQuestion = async (difficulty, previousQuestions = [], maxRetries =
         temperature: 0.3,
       });
 
-      const parsed = JSON.parse(res.choices[0].message.content);
+      let parsed;
+      try {
+        parsed = JSON.parse(res.choices[0].message.content);
+      } catch (parseErr) {
+        throw new Error(`AI returned invalid JSON: ${parseErr.message}`);
+      }
+
+      if (!parsed || typeof parsed !== "object") {
+        throw new Error("AI returned an empty or invalid response");
+      }
 
       parsed.referenceSolution = unescapeNewlines(parsed.referenceSolution);
       ["javascript", "python", "cpp", "java"].forEach(lang => {
@@ -458,13 +475,14 @@ const generateQuestion = async (difficulty, previousQuestions = [], maxRetries =
         if (parsed.functionSignature?.[lang]) {
           parsed.functionSignature[lang] = unescapeNewlines(parsed.functionSignature[lang]);
         }
-        if (parsed.driverCode?.java) {
-          parsed.driverCode.java = fixJavaRegexEscaping(parsed.driverCode.java);
-        }
       });
+      if (parsed.driverCode?.java) {
+        parsed.driverCode.java = fixJavaRegexEscaping(parsed.driverCode.java);
+      }
       parsed.examples = (parsed.examples || []).map(ex => ({
         ...ex,
         input: unescapeNewlines(ex.input),
+        output: unescapeNewlines(ex.output),
       }));
       parsed.testcases = (parsed.testcases || []).map(tc => ({
         ...tc,
@@ -474,6 +492,13 @@ const generateQuestion = async (difficulty, previousQuestions = [], maxRetries =
       const requiredFields = ["title", "difficulty", "topic", "description", "InputFormat", "constraints", "referenceSolution", "examples", "testcases", "functionSignature", "driverCode"];
       for (const field of requiredFields) {
         if (!parsed[field]) throw new Error(`Missing required field: ${field}`);
+      }
+
+      if (!Array.isArray(parsed.examples) || parsed.examples.length === 0) {
+        throw new Error("No examples were generated");
+      }
+      if (!Array.isArray(parsed.testcases) || parsed.testcases.length === 0) {
+        throw new Error("No testcases were generated");
       }
 
       if (!parsed.driverCode.javascript?.includes("INPUT_STRING")) {
@@ -518,13 +543,20 @@ const generateQuestion = async (difficulty, previousQuestions = [], maxRetries =
       console.log("Syncing truth via Piston Python execution...");
       const verified = await verifyWithSelfHealing(parsed);
 
+      if (!verified) {
+        throw new Error("Verification returned no result");
+      }
+
       console.log(`Success: "${verified.title}" generated and verified!`);
       return verified;
 
     } catch (error) {
       console.warn(`Attempt ${attempt} failed: ${error.message}`);
       if (attempt === maxRetries) throw error;
-      const delay = 10000 * attempt;
+
+      const isRateLimit = error.status === 429 || /rate.?limit/i.test(error.message || "");
+      const delay = isRateLimit ? 10000 * attempt : 1500 * attempt;
+
       console.log(`Retrying in ${delay / 1000}s with a fresh question...`);
       await new Promise(r => setTimeout(r, delay));
     }
@@ -532,67 +564,3 @@ const generateQuestion = async (difficulty, previousQuestions = [], maxRetries =
 };
 
 module.exports = generateQuestion;
-
-
-
-// -----------------------------------
-// STRICT OUTPUT FORMAT
-// -----------------------------------
-// {
-//   "title": "string",
-//   "difficulty": "${difficulty}",
-//   "topic": "${topic}",
-//   "description": "string — explain the problem clearly",
-//   "InputFormat": "string — describe exactly how input tokens map to variables",
-//   "constraints": ["string"],
-//   "referenceSolution": "full valid python3 script that reads from stdin and prints result",
-//   "examples": [
-//     {
-//       "input": "string — raw input tokens exactly as they would appear",
-//       "explanation": "string — explain why this is the correct output"
-//     }
-//   ],
-//   "testcases": [
-//     {
-//       "input": "string — raw input tokens"
-//     }
-//   ],
-//   "functionSignature": {
-//     "javascript": "function solve(...args) {\\n  // Write your code here\\n}",
-//     "python": "def solve(...args):\\n    # Write your code here\\n    pass",
-//     "cpp": "#include <bits/stdc++.h>\\nusing namespace std;\\n\\n// Write your code here",
-//     "java": "public static <returnType> solve(<params>) {\\n    // Write your code here\\n}"  },
-//   "driverCode": {
-//     "javascript": "FULL JS DRIVER — uses INPUT_STRING, parses tokens, calls solve(), ends with console.log(JSON.stringify(result))",
-//     "python": "FULL PYTHON DRIVER — uses INPUT_STRING, parses data, calls solve(), ends with print()",
-//     "java": "FULL JAVA DRIVER — class Solution, reads via Scanner from stdin, calls solve(), ends with System.out.println(result)",
-//     "cpp": "FULL CPP DRIVER — reads via cin from stdin, calls solve(), ends with cout << result"
-//   }
-// }
-
-
-// -----------------------------------
-// EXAMPLE OF CORRECT DRIVER CODE (Two Sum)
-// -----------------------------------
-// javascript driverCode:
-// const tokens = INPUT_STRING.trim().split(/\s+/);
-// const n = parseInt(tokens[0]);
-// const nums = tokens.slice(1, n + 1).map(Number);
-// const target = parseInt(tokens[n + 1]);
-// // Write your code here
-// const result = solve(nums, target);
-// console.log(JSON.stringify(result));
-
-// python driverCode:
-// import json
-// data = INPUT_STRING.strip().split()
-// n = int(data[0])
-// nums = list(map(int, data[1:n+1]))
-// target = int(data[n+1])
-// # Write your code here
-// result = solve(nums, target)
-// print(json.dumps(result))
-
-// corresponding input example:
-// "3\\n2 7 11\\n9"
-// (first token = n, next n tokens = array, last token = target)

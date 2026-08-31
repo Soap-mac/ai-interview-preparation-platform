@@ -23,11 +23,27 @@ const loginLimiter = rateLimit({
     max: 10
 });
 
-// app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth', require("./routes/authRoutes"));
 app.use('/api/interview', require("./routes/interviewRoutes.js"));
 app.use('/api/interview', require("./routes/dsaInterview.js"));
 
+
+app.use((err, req, res, next) => {
+    console.error("Unhandled route error:", err);
+    if (res.headersSent) return next(err);
+    res.status(500).json({
+        success: false,
+        message: "Internal server error"
+    });
+});
+
+process.on("unhandledRejection", (reason) => {
+    console.error("Unhandled promise rejection:", reason);
+});
+
+process.on("uncaughtException", (err) => {
+    console.error("Uncaught exception:", err);
+});
 
 app.listen(8000, () => {
     console.log("Server listening on port 8000");

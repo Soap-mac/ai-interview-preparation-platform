@@ -8,14 +8,20 @@ const evaluateDSA = require("../services/evaluateDSA");
 const getNextDifficulty = require("../utils/getNextDifficulty");
 const buildFinalCode = require("../utils/buildFinalCode");
 const { parseValue, deepEqual } = require("../utils/compareOutput");
+const { invalidateAnalyticsCache } = require("../utils/Analyticscache");
 const path = require('path')
 
 
-// Test Route
+const ALLOWED_TEST_QUESTION_FILES = ["question1.json", "question2.json"];
+
 router.post("/dsa/start-test", authMiddleware, async (req, res) => {
     try {
         const { questionNo, questionFile } = req.body;
         const fileName = questionFile || "question1.json";
+
+        if (!ALLOWED_TEST_QUESTION_FILES.includes(fileName)) {
+            return res.status(400).json({ message: "Invalid test question file" });
+        }
 
         delete require.cache[require.resolve(`../testData/${fileName}`)];
         const question = require(`../testData/${fileName}`);
@@ -83,28 +89,31 @@ router.post("/dsa/start", authMiddleware, async (req, res) => {
 });
 
 router.get("/:id/currentDSA", authMiddleware, async (req, res) => {
-    console.log("hiiiiiiiiiiiiiiiiiiiiiii");
-    const interview = await Interview.findOne({
-        _id: req.params.id,
-        user: req.user
-    });
+    try {
+        const interview = await Interview.findOne({
+            _id: req.params.id,
+            user: req.user
+        });
 
-    if (!interview) {
-        return res.status(404).json({ success: false });
-    }
+        if (!interview) {
+            return res.status(404).json({ success: false });
+        }
 
-    if (interview.currentQuestionIndex == interview.totalQuestions) {
+        if (interview.currentQuestionIndex == interview.totalQuestions) {
+            return res.json({
+                success: false,
+                message: "All Questions are answered"
+            })
+        }
+        const currentQuestion =
+            interview.questions[interview.currentQuestionIndex];
         return res.json({
-            success: false,
-            message: "All Questions are answered"
-        })
+            question: currentQuestion.metadata
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ success: false, message: "Internal server error" });
     }
-    const currentQuestion =
-        interview.questions[interview.currentQuestionIndex];
-    console.log(currentQuestion.metadata);
-    return res.json({
-        question: currentQuestion.metadata
-    });
 });
 
 const runJava = require("../compilers/java");
@@ -134,11 +143,14 @@ async function functionExtraction(language, code) {
     }
 }
 
-router.post("/run", async (req, res) => {
+router.post("/run", authMiddleware, async (req, res) => {
     try {
         const { code, language, InterviewId } = req.body;
 
-        const interview = await Interview.findById(InterviewId);
+        const interview = await Interview.findOne({
+            _id: InterviewId,
+            user: req.user
+        });
         if (!interview) throw new Error("Interview not found");
 
         const question = interview.questions[interview.currentQuestionIndex];
@@ -176,6 +188,7 @@ router.post("/run", async (req, res) => {
                     input: tc.input,
                     expected: tc.output ?? tc.expected ?? "",
                     output: "Error: " + err.message,
+                    passed: false,
                 });
             }
         }
@@ -189,13 +202,20 @@ router.post("/run", async (req, res) => {
         return res.status(500).json({ message: error.message });
     }
 });
+
 router.post("/submitDSA", authMiddleware, async (req, res) => {
     try {
         const { code, language, InterviewId } = req.body;
 
         console.log(language);
 
-        const interview = await Interview.findById(InterviewId);
+        // Ownership check added — previously used findById() with no
+        // user filter, so any logged-in user could submit against ANY
+        // other user's interview if they knew/guessed the ID.
+        const interview = await Interview.findOne({
+            _id: InterviewId,
+            user: req.user
+        });
         if (!interview) throw new Error("Interview not found");
         const question = interview.questions[interview.currentQuestionIndex];
         if (!question) throw new Error("Question not found");
@@ -254,14 +274,12 @@ router.post("/submitDSA", authMiddleware, async (req, res) => {
         question.passedTestCases = passedCount;
         question.totalTestCases = total;
         console.log("Results " + results);
-        // question.output = results;
         question.correctness = (passedCount / total) * 100;
 
         const evaluation = await evaluateDSA({ question, code, results });
         console.log("After evaluateDSA");
         console.log("Evaluated results by ai", evaluation);
         question.score = evaluation.score;
-        // question.verdict = evaluation.verdict;
         question.feedback = evaluation.feedback;
         question.strengths = evaluation.strengths;
         question.weaknesses = evaluation.weaknesses;
@@ -284,6 +302,7 @@ router.post("/submitDSA", authMiddleware, async (req, res) => {
 
             console.log("Before saving");
             await interview.save();
+            invalidateAnalyticsCache(req.user);
             console.log("After saving");
 
             return res.json({
@@ -314,7 +333,10 @@ router.post("/submitDSA", authMiddleware, async (req, res) => {
 
     } catch (error) {
         console.log(error);
-        return res.status(500).json(error);
+        return res.status(500).json({
+            success: false,
+            message: error.message || "Internal server error"
+        });
     }
 });
 

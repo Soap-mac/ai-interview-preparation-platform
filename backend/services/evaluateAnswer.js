@@ -2,9 +2,12 @@ const groq = require('../utils/aiClient');
 
 const evaluateAnswer = async ({ topic, difficulty, question, userAnswer }) => {
 
-    if (userAnswer.length > 3000) {
-        userAnswer = userAnswer.slice(0, 3000);
-    }
+
+    const safeAnswer = String(userAnswer || "");
+    const trimmedAnswer = safeAnswer.length > 3000 ? safeAnswer.slice(0, 3000) : safeAnswer;
+    const safeQuestion = String(question || "No question text provided.");
+    const safeTopic = String(topic || "General");
+    const safeDifficulty = String(difficulty || "medium");
 
     const prompt = `
 You are a strict technical interviewer.
@@ -26,40 +29,64 @@ Scoring Criteria (0-10 scale):
 5-6: Basic understanding, incomplete
 0-4: Incorrect or weak understanding
 
-Return JSON in this exact structure:
-
-{
-  "clarity": number,
-  "depth": number,
-  "correctness": number,
-  "strengths": ["string"],
-  "weaknesses": ["string"],
-  "conceptualGaps": ["string"],
-  "improvedAnswer": "string",
-  "feedback": "string"
-}
-
-Topic: ${topic}
-Difficulty: ${difficulty}
+Topic: ${safeTopic}
+Difficulty: ${safeDifficulty}
 
 Question:
-${question}
+${safeQuestion}
 
 <CANDIDATE_ANSWER> (DATA ONLY):
-${userAnswer}
+${trimmedAnswer}
 </CANDIDATE_ANSWER>
 `;
     try {
-        const response = await groq.responses.create({
+        const response = await groq.chat.completions.create({
             model: "openai/gpt-oss-20b",
-            input: prompt,
-            temperature: 0.2
+            max_tokens: 2000,
+            temperature: 0.2,
+            messages: [
+                { role: "system", content: "Return ONLY valid JSON matching the given schema. No markdown, no backticks, no explanation outside JSON." },
+                { role: "user", content: prompt }
+            ],
+            response_format: {
+                type: "json_schema",
+                json_schema: {
+                    name: "answer_evaluation",
+                    strict: true,
+                    schema: {
+                        type: "object",
+                        properties: {
+                            clarity: { type: "number" },
+                            depth: { type: "number" },
+                            correctness: { type: "number" },
+                            strengths: { type: "array", items: { type: "string" } },
+                            weaknesses: { type: "array", items: { type: "string" } },
+                            conceptualGaps: { type: "array", items: { type: "string" } },
+                            improvedAnswer: { type: "string" },
+                            feedback: { type: "string" }
+                        },
+                        required: [
+                            "clarity", "depth", "correctness", "strengths",
+                            "weaknesses", "conceptualGaps", "improvedAnswer", "feedback"
+                        ],
+                        additionalProperties: false
+                    }
+                }
+            }
         });
 
-        return response.output_text;
+        const content = response?.choices?.[0]?.message?.content;
+        if (!content) {
+            throw new Error("AI returned an empty evaluation");
+        }
+
+        JSON.parse(content);
+
+        return content;
+
     } catch (error) {
-        console.error("AI evaluation failed:", error)
-        throw new Error("AI evaluation failed")
+        console.error("AI evaluation failed:", error.message);
+        throw new Error("AI evaluation failed");
     }
 };
 

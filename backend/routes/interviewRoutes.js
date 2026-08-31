@@ -6,6 +6,7 @@ const Interview = require("../models/interview");
 const evaluateAnswer = require("../services/evaluateAnswer");
 const getNextDifficulty = require("../utils/getNextDifficulty");
 const NormalizeConceptualGaps = require("../services/conceptualGapNormalization");
+const { getCachedAnalytics, setCachedAnalytics, invalidateAnalyticsCache } = require("../utils/analyticsCache");
 
 
 router.post('/start', authMiddleware, async (req, res) => {
@@ -152,10 +153,11 @@ router.post('/answer', authMiddleware, async (req, res) => {
             });
         }
 
-        // parsed.score = Math.max(0, Math.min(10, parsed.score));
-        parsed.clarity = Math.max(0, Math.min(10, parsed.clarity));
-        parsed.depth = Math.max(0, Math.min(10, parsed.depth));
-        parsed.correctness = Math.max(0, Math.min(10, parsed.correctness));
+        // Defensive: coerce to numbers first so a missing/non-numeric field
+        // doesn't silently become NaN and get saved to the database.
+        parsed.clarity = Math.max(0, Math.min(10, Number(parsed.clarity) || 0));
+        parsed.depth = Math.max(0, Math.min(10, Number(parsed.depth) || 0));
+        parsed.correctness = Math.max(0, Math.min(10, Number(parsed.correctness) || 0));
 
         question.userAnswer = answer;
         question.clarity = parsed.clarity;
@@ -183,6 +185,7 @@ router.post('/answer', authMiddleware, async (req, res) => {
             interview.status = "completed";
 
             await interview.save();
+            invalidateAnalyticsCache(req.user);
 
             return res.json({
                 success: true,
@@ -273,7 +276,7 @@ router.post('/submit', authMiddleware, async (req, res) => {
             });
         }
 
-        parsed.score = Math.max(0, Math.min(100, parsed.score));
+        parsed.score = Math.max(0, Math.min(100, Number(parsed.score) || 0));
 
         interview.userAnswer = answer;
         interview.score = parsed.score;
@@ -284,6 +287,7 @@ router.post('/submit', authMiddleware, async (req, res) => {
         interview.status = "completed";
 
         await interview.save();
+        invalidateAnalyticsCache(req.user);
 
         return res.json({
             success: true,
@@ -532,7 +536,9 @@ router.get("/report/:id", authMiddleware, async (req, res) => {
         const avgDepth = Number((totalDepth / questions.length).toFixed(2));
         const avgCorrectness = Number(((totalCorrectness / questions.length) / 10).toFixed(2));
         console.log("total correctness ", totalCorrectness, "questions length ", questions.length);
-        const testCasePassPercentage = Number(((testCasePass / totalTestCases) * 10).toFixed(2));
+        const testCasePassPercentage = totalTestCases > 0
+            ? Number(((testCasePass / totalTestCases) * 10).toFixed(2))
+            : 0;
         const codeQuality = Number(((readability + modularity + naming) / (questions.length * 3)).toFixed(0));
         console.log("modularity ", modularity, " readability ", readability, " naming ", naming, " codeQuality ", codeQuality);
         let metrics = {};
@@ -621,7 +627,10 @@ router.get("/report/:id", authMiddleware, async (req, res) => {
 
 router.get("/analytics/overall", authMiddleware, async (req, res) => {
     try {
-        const user = req.user;
+        const cached = getCachedAnalytics(req.user);
+        if (cached) {
+            return res.status(200).json(cached);
+        }
 
         const allInterviews = await Interview.find({
             user: req.user,
@@ -629,7 +638,7 @@ router.get("/analytics/overall", authMiddleware, async (req, res) => {
         }).lean();
 
         const totalInterviews = allInterviews.length;
-        let avgScore = 0;
+        let avgScoreSum = 0;
 
         const topics = {
             DSA: { total: 0, count: 0 },
@@ -637,93 +646,78 @@ router.get("/analytics/overall", authMiddleware, async (req, res) => {
             CN: { total: 0, count: 0 },
             DBMS: { total: 0, count: 0 },
             HR: { total: 0, count: 0 },
-        }
+        };
 
         allInterviews.forEach((i) => {
-            avgScore += i.finalScore;
+            const score = i.finalScore || 0;
+            avgScoreSum += score;
             const topic = i.topic;
-            topics[topic].total += i.finalScore;
-            topics[topic].count += 1;
+            if (topics[topic]) {
+                topics[topic].total += score;
+                topics[topic].count += 1;
+            }
         });
 
-        avgScore = avgScore == 0 ? 0 : Number(avgScore / totalInterviews).toFixed(2);
+        const avgScore = totalInterviews === 0 ? "0.00" : (avgScoreSum / totalInterviews).toFixed(2);
 
         let correctness = 0;
         let clarity = 0;
         let depth = 0;
-
-
         const gaps = [];
 
         allInterviews.forEach(interview => {
-            interview.questions.forEach(q => {
+            (interview.questions || []).forEach(q => {
                 correctness += q.correctness || 0;
                 clarity += q.clarity || 0;
                 depth += q.depth || 0;
 
-                if (q.conceptualGaps) {
+                if (Array.isArray(q.conceptualGaps)) {
                     gaps.push(...q.conceptualGaps);
                 }
             });
         });
 
-
-
-
         const metrics = { clarity, depth, correctness };
-
-        const strongestArea = Object.entries(metrics)
-            .sort((a, b) => b[1] - a[1])[0][0];
-
-        const weakestArea = Object.entries(metrics)
-            .sort((a, b) => a[1] - b[1])[0][0];
-
+        const sortedMetrics = Object.entries(metrics).sort((a, b) => b[1] - a[1]);
+        const strongestArea = sortedMetrics[0][0];
+        const weakestArea = sortedMetrics[sortedMetrics.length - 1][0];
 
         const limitedGaps = gaps.slice(0, 100);
-        const normalized = await NormalizeConceptualGaps(limitedGaps);
-
-
-
-        let parsed;
-
-        try {
-            parsed = JSON.parse(normalized);
-        } catch (err) {
-            return res.status(500).json({
-                success: false,
-                message: "AI returned invalid JSON format"
-            });
-        }
+        const normalizedGaps = await NormalizeConceptualGaps(limitedGaps);
 
         const gapFrequency = {};
-
-        parsed.forEach(g => {
+        normalizedGaps.forEach(g => {
+            if (!g) return;
             gapFrequency[g] = (gapFrequency[g] || 0) + 1;
         });
 
-        const topGaps = Object.entries(gapFrequency).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        const topGaps = Object.entries(gapFrequency)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 5)
+            .map(([gap, count]) => ({ concept: gap, frequency: count }));
 
-        const formattedGaps = topGaps.map(([gap, count]) => ({
-            concept: gap,
-            frequency: count
-        }));
-
-        return res.status(200).json({
+        const responsePayload = {
             success: true,
             totalInterviews,
             avgScore,
             strongestArea,
             weakestArea,
             topics,
-            topGaps: formattedGaps,
-        })
+            topGaps,
+        };
+
+        setCachedAnalytics(req.user, responsePayload);
+
+        return res.status(200).json(responsePayload);
+
     } catch (error) {
+        console.error("analytics/overall error:", error);
         return res.status(500).json({
             success: false,
             message: "Internal server Error",
-        })
+        });
     }
-})
+});
 
 //question
 // userAnswer
