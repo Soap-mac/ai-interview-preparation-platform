@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import api from "./api";
-import StartInterview from "./pages/startInterview";
+import StartInterview from "./pages/StartInterview";
 import InterviewSession from "./pages/InterviewSession";
 import InterviewReport from "./pages/InterviewReport";
 import AnalyticsDashboard from "./pages/Dashboard";
