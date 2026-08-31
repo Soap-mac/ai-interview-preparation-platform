@@ -45,6 +45,8 @@ process.on("uncaughtException", (err) => {
     console.error("Uncaught exception:", err);
 });
 
+app.get("/health", (req, res) => res.status(200).json({ status: "ok" }));
+
 app.listen(8000, () => {
     console.log("Server listening on port 8000");
 });
