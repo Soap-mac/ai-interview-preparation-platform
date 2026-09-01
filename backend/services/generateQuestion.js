@@ -48,7 +48,7 @@ ${history}
     try {
         const res = await groq.chat.completions.create({
             model: "openai/gpt-oss-20b",
-            max_completion_tokens: 512,
+            max_completion_tokens: 1024,
             reasoning_effort: "low",
             include_reasoning: false,
             temperature: 0.4,
