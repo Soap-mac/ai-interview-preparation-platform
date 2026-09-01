@@ -29,6 +29,7 @@ Rules:
 - Keep the question clear and concise.
 - Maximum length: 2 sentences.
 
+
 The question should be one of the following types:
 - conceptual understanding
 - scenario/problem-solving
@@ -40,6 +41,14 @@ Output Rules:
 - No explanations.
 - No extra text.
 - Plain text only.
+
+FORMATTING RULES:
+- Do NOT use LaTeX.
+- Do NOT use Markdown.
+- Do NOT use backslashes.
+- Do NOT use \( \), \[ \], $$, or $.
+- Do NOT use subscripts such as m_1 or x_1.
+- Write everything using normal readable text.
 
 Previously Asked Questions:
 ${history}
@@ -75,6 +84,8 @@ ${history}
             .trim()
             .replace(/^["']|["']$/g, "")
             .replace(/^Question:\s*/i, "")
+            .replace(/\\\(|\\\)|\\\[|\\\]/g, "")
+            .replace(/\\+/g, "")
             .trim();
 
         return question;
