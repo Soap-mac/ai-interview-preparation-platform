@@ -58,15 +58,15 @@ router.post("/signup", async (req, res) => {
 
         res.cookie('AccessToken', Accesstoken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "strict",
+            secure: true,
+            sameSite: "none",
             maxAge: 15 * 24 * 60 * 60 * 1000,
 
         });
         res.cookie('RefreshToken', Refreshtoken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "strict",
+            secure: true,
+            sameSite: "none",
             maxAge: 15 * 24 * 60 * 60 * 1000,
 
         });
@@ -125,15 +125,15 @@ router.post('/login', async (req, res) => {
 
         res.cookie('AccessToken', Accesstoken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "strict",
+            secure: true,
+            sameSite: "none",
             maxAge: 15 * 24 * 60 * 60 * 1000,
 
         });
         res.cookie('RefreshToken', Refreshtoken, {
             httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "strict",
+            secure: true,
+            sameSite: "none",
             maxAge: 15 * 24 * 60 * 60 * 1000,
 
         });
@@ -239,15 +239,15 @@ router.post('/refresh', async (req, res) => {
 
     res.cookie('AccessToken', Accesstoken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
+        secure: true,
+        sameSite: "none",
         maxAge: 15 * 60 * 1000,
 
     });
     res.cookie('RefreshToken', Refreshtoken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "strict",
+        secure: true,
+        sameSite: "none",
         maxAge: 15 * 24 * 60 * 60 * 1000,
 
     });
