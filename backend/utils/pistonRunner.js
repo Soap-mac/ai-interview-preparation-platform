@@ -1,6 +1,6 @@
 const fetch = require("node-fetch");
 
-const PISTON_URL = "http://localhost:2000";
+const PISTON_URL = process.env.PISTON_URL;
 
 const LANGUAGE_VERSIONS = {
     python: "3.12.0",
