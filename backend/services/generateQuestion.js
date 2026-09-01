@@ -48,17 +48,26 @@ ${history}
     try {
         const res = await groq.chat.completions.create({
             model: "openai/gpt-oss-20b",
-            max_tokens: 300,
+            max_completion_tokens: 512,
+            reasoning_effort: "low",
+            include_reasoning: false,
             temperature: 0.4,
             messages: [
-                { role: "system", content: "Return ONLY the question. Plain text only — no numbering, no explanations, no extra text, no markdown." },
-                { role: "user", content: prompt }
+                {
+                    role: "system",
+                    content: "Return ONLY the interview question. Plain text only."
+                },
+                {
+                    role: "user",
+                    content: prompt
+                }
             ]
         });
 
         const rawQuestion = res?.choices?.[0]?.message?.content;
 
-        if (!rawQuestion || !rawQuestion.trim()) {
+        if (!rawQuestion?.trim()) {
+            console.error("Empty AI response:", JSON.stringify(res, null, 2));
             throw new Error("AI returned empty question");
         }
 
@@ -67,10 +76,6 @@ ${history}
             .replace(/^["']|["']$/g, "")
             .replace(/^Question:\s*/i, "")
             .trim();
-
-        if (!question) {
-            throw new Error("AI returned empty question after cleanup");
-        }
 
         return question;
 
